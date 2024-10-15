@@ -1,0 +1,112 @@
+#################################################################################
+email: 248797299@qq.com
+这是一个powershell脚本，请保存为扩展名为ps1的文件，普通用户即可成功运行。目前仅支持pap chap认证
+###################################################################################
+
+#Set-ExecutionPolicy  -ExecutionPolicy Unrestricted  -Scope CurrentUser
+ If (-NOT ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator"))
+{
+    # 提示用户提升权限
+    Write-Warning "此脚本需要管理员权限才能执行。请重新以管理员身份运行。"
+    Start-Process powershell -Verb runAs -ArgumentList ("-File `"" + $PSCommandPath + "`"")
+    Exit
+}
+#$dyroute=@("30.60.160.0/24","30.60.163.0/24","30.60.164.0/24","21.67.192.0/21","21.67.224.0/22")
+#$xcspzx=@("10.13.0.0/16","10.14.0.0/16","10.17.0.0/16","30.60.144.0/21","7.98.128.0/21")
+Set-ExecutionPolicy  -ExecutionPolicy Unrestricted  -Scope CurrentUser -Force
+$route_dict=@{}
+#$route_dict["219.146.14.192"]=$xcspzx
+###############此处通过字典添加公网地址和路由的对应关系该脚本会自己添加无需手工输入##################
+
+###############上面空白处通过字典添加公网地址和路由的对应关系############
+function dialVPN {
+	$vpnConnections = Get-VpnConnection
+# 输出每个VPN拨号的状态
+    $index=1
+	$connection_dict=@{}
+    foreach ($connection in $vpnConnections) {
+        Write-Host "$index : $($connection.Name)"
+		#$connection_dict[$index]=@($($connection.ServerAddress),$($connection.Name))
+		$connection_dict[$index.ToString()]=$connection
+        $index++
+    }
+    $choice=read-host "请输入您要选择拨号的VPN"
+    $dialname=""
+    $username=Read-Host "input your VPN username"
+    $password=Read-Host "input your VPN password" -AsSecureString
+    $ptr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($password)
+    $clearPassword = [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($ptr)
+    $dialname=$($connection_dict[$choice].Name)
+    rasdial $dialname $username $clearPassword
+    $ip=$(Get-NetIPAddress -InterfaceAlias $dialname | select -expandproperty ipaddress)
+    $ifid=$(Get-NetIPAddress -InterfaceAlias $dialname | select -expandproperty InterfaceIndex)
+    Remove-NetRoute –NextHop 172.31.254.* -PolicyStore PersistentStore -Confirm:$false
+    foreach ($route in $route_dict[$($connection_dict[$choice].ServerAddress)]){
+    New-NetRoute -DestinationPrefix $route -InterfaceIndex $ifid -NextHop $ip  -PolicyStore ActiveStore
+	}
+}
+function createVPNConnection {
+	$connectionname=Read-Host "输入一个VPN拨号的名字,请不要出现汉字字符"
+    $Serverip=Read-Host "输入VPN的公网的IP"
+    #Remove-VpnConnection -name $connectionname -force
+    Add-VpnConnection -ConnectionName $connectionname -SplitTunneling $true
+    Set-VpnConnection -ConnectionName $connectionname -TunnelType "L2tp" -EncryptionLevel "Optional" -AuthenticationMethod Pap,Chap -ServerAddress $Serverip
+    New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\services\RasMan\Parameters" -Name "ProhibitIpSec" -Value 1 -PropertyType DWord -Force
+    Write-Warning "需要重启计算机配置才可以生效，请保存好所有内容手动重启您的计算机"
+    Read-Host "按任意键退出"
+	start_this_script
+}
+function add_route {
+    $vpnConnections = Get-VpnConnection
+	$index=1
+	$connection_dict=@{}
+    foreach ($connection in $vpnConnections) {
+        Write-Host "$index : $($connection.Name)"
+		#$connection_dict[$index]=@($($connection.ServerAddress),$($connection.Name))
+		$connection_dict[$index.ToString()]=$connection
+        $index++
+    }
+	$choice=read-host "请选择要为那个拨号添加路由"
+	$string_routers=read-host "请输入要添加的路由网段，网段之间使用逗号隔开，如：30.60.160.0/24,30.60.163.0/24,30.60.164.0/24,21.67.192.0/21,21.67.224.0/22
+	"
+	$array_routers=($string_routers -split ',' | ForEach-Object { $_.Trim() })
+	$befor_routers_array=$route_dict[$($connection_dict[$choice].ServerAddress)]
+#	$insertroutevalues='$'+$($connection_dict[$choice].Name)+'=@('+$routers+')\r\n'
+	$array_routers=$befor_routers_array+$array_routers
+	$quoted_routers_array=$array_routers | Foreach-Object { "`"$_`"" }
+	$quoted_routers_str=$($quoted_routers_array -join ",")
+	$insertdictvalues='$route_dict["'+$($connection_dict[$choice].ServerAddress)+'"]=@('+$quoted_routers_str+")"
+	$route_dict[$($connection_dict[$choice].ServerAddress)]=$array_routers
+	$content = Get-Content -Path $PSCommandPath
+	$targetContent='###############上面空白处通过字典添加公网地址和路由的对应关系############'
+	$targetIndex = $content.IndexOf($targetContent)
+	$content = $content[0..($targetIndex - 1)] +$insertdictvalues + $content[$targetIndex..($content.Count - 1)]
+	Set-Content -Path $PSCommandPath -Value $content
+	start_this_script
+}
+function start_this_script {
+	$action=Read-Host "创建VPN连接请输入    1;
+Vpn拨号请输入        2
+添加路由请输入       3
+
+"	
+	$array=@(1,2,3)
+	if (-not ($array | Where-Object { $_ -eq $action })) {
+	start_this_script
+}
+	switch ( $action )
+    {
+	1 {
+		createVPNConnection
+	}
+	2 {
+		dialVPN
+	}
+	3 {
+		add_route
+	}
+   }
+}
+
+
+start_this_script
