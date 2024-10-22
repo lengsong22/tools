@@ -1,6 +1,6 @@
-#################################################################################
-email: 248797299@qq.com
-这是一个powershell脚本，请保存为扩展名为ps1的文件，普通用户即可成功运行。目前仅支持pap chap认证
+######################################################################################### 
+#email: 248797299@qq.com                                                                  
+#这是一个powershell脚本，请保存为扩展名为ps1的文件，普通用户即可成功运行。目前仅支持pap chap认证 
 ###################################################################################
 
 #Set-ExecutionPolicy  -ExecutionPolicy Unrestricted  -Scope CurrentUser
@@ -11,8 +11,6 @@ email: 248797299@qq.com
     Start-Process powershell -Verb runAs -ArgumentList ("-File `"" + $PSCommandPath + "`"")
     Exit
 }
-#$dyroute=@("30.60.160.0/24","30.60.163.0/24","30.60.164.0/24","21.67.192.0/21","21.67.224.0/22")
-#$xcspzx=@("10.13.0.0/16","10.14.0.0/16","10.17.0.0/16","30.60.144.0/21","7.98.128.0/21")
 Set-ExecutionPolicy  -ExecutionPolicy Unrestricted  -Scope CurrentUser -Force
 $route_dict=@{}
 #$route_dict["219.146.14.192"]=$xcspzx
@@ -67,7 +65,7 @@ function add_route {
         $index++
     }
 	$choice=read-host "请选择要为那个拨号添加路由"
-	$string_routers=read-host "请输入要添加的路由网段，网段之间使用逗号隔开，如：30.60.160.0/24,30.60.163.0/24,30.60.164.0/24,21.67.192.0/21,21.67.224.0/22
+	$string_routers=read-host "请输入要添加的路由网段，网段之间使用逗号隔开，如：10.60.160.0/24,10.60.163.0/24,10.60.164.0/24,31.67.192.0/21,31.67.224.0/22
 	"
 	$array_routers=($string_routers -split ',' | ForEach-Object { $_.Trim() })
 	$befor_routers_array=$route_dict[$($connection_dict[$choice].ServerAddress)]
